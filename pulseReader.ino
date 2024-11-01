@@ -1,8 +1,16 @@
 #include <ArduinoBLE.h>
+#include <PulseSensorPlayground.h>
+#define USE_ARDUINO_INTERRUPTS true
 
-// BLE service and characteristic UUIDs
-BLEService myService("abcdefab-1234-5678-1234-56789abcdef0");   
-BLEIntCharacteristic myCharacteristic("abcdefab-4321-5678-1234-56789abcdef0", BLERead | BLENotify); 
+ 
+// Constants
+const int PULSE_SENSOR_PIN = 0;  // Analog PIN where the PulseSensor is connected
+const int LED_PIN = 13;          // On-board LED PIN
+const int THRESHOLD = 550;  
+// Custom BLE service and characteristic UUIDs
+BLEService myService("abcdefab-1234-5678-1234-56789abcdef0");   // Replace with your own service UUID
+BLEIntCharacteristic bpmCharacteristic("abcdefab-4321-5678-1234-56789abcdef0", BLERead | BLENotify); // Replace with your own characteristic UUID
+PulseSensorPlayground pulseSensor;
 
 void setup() {
   // Initialize Serial Monitor
@@ -19,13 +27,23 @@ void setup() {
 
   // Add the service and characteristic
   BLE.setAdvertisedService(myService);
-  myService.addCharacteristic(myCharacteristic);
+  myService.addCharacteristic(bpmCharacteristic);
   BLE.addService(myService);
 
   // Start advertising
   BLE.advertise();
   
   Serial.println("BLE device is now advertising");
+
+  pulseSensor.analogInput(PULSE_SENSOR_PIN);
+  pulseSensor.blinkOnPulse(LED_PIN);
+  pulseSensor.setThreshold(THRESHOLD);
+ 
+  // Check if PulseSensor is initialized
+  if (pulseSensor.begin()) 
+  {
+    Serial.println("PulseSensor object created successfully!");
+  }
 }
 
 void loop() {
@@ -38,15 +56,19 @@ void loop() {
 
     // While the central is connected
     while (central.connected()) {
-      // Read the pulse data from the analog pin
-      int pulse = analogRead(A0);
-      Serial.print("Pulse reading: ");
-      Serial.println(pulse); // Print the pulse reading to the Serial Monitor
+      // Check if a heartbeat was detected
+      if (pulseSensor.sawStartOfBeat()) {
+        int currentBPM = pulseSensor.getBeatsPerMinute();
+        
+        Serial.println("♥ A HeartBeat Happened!");
+        Serial.print("BPM: ");
+        Serial.println(currentBPM);
 
-      // Set the value of the pulse characteristic
-      myCharacteristic.setValue(pulse); // Send the pulse as an integer
-
-      delay(1000); // Delay before the next reading
+        // Update the characteristic with the current BPM
+        bpmCharacteristic.setValue(currentBPM);
+        Serial.print("BPM sent: ");
+        Serial.println(currentBPM);
+      }
     }
 
     Serial.print("Disconnected from central: ");
